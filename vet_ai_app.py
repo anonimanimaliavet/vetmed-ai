@@ -192,6 +192,9 @@ import hashlib
 st.set_page_config(page_title="VetMed AI - Kurumsal Klinik Portal", layout="wide", page_icon="🏥")
 
 # --- KESİN VE DOĞRULANMIŞ SQLITE VERİTABANI YOLU ---
+import os
+import sqlite3
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "vetmed_klinik.db")
 def veritabani_baglanti_ve_kontrol():
@@ -266,22 +269,22 @@ aktif_vaka_sayisi = veritabani_baglanti_ve_kontrol()
 # API anahtarını Streamlit Secrets üzerinden güvenle çekiyoruz
 SECURE_GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
-def guvenlik_dogrula(kullanici_input, sifre_input):
-    if not kullanici_input or not sifre_input:
-        return False
-    kadi = kullanici_input.strip().lower()
-    sifre_hash = hashlib.sha256(sifre_input.strip().encode()).hexdigest()
+def kullanici_dogrula(girilen_kullanici, girilen_sifre):
     try:
         conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT sifre_hash FROM kullanicilar WHERE kullanici_adi = ?", (kadi,))
-        row = cursor.fetchone()
+        c = conn.cursor()
+        # Kullanıcı adı ve şifresi doğru mu, ayrıca hesabı "Aktif" mi diye bakıyoruz
+        c.execute("SELECT id, kullanici_adi, yetkili_moduller FROM kullanicilar WHERE kullanici_adi = ? AND sifre = ? AND aktif_mi = 1", (girilen_kullanici, girilen_sifre))
+        kullanici = c.fetchone()
         conn.close()
-        if row and row[0] == sifre_hash:
-            return True
-    except:
-        pass
-    return False
+        
+        if kullanici:
+            # Giriş başarılıysa kullanıcı bilgilerini ve yetkili olduğu modülleri döndür
+            return {"id": kullanici[0], "kullanici_adi": kullanici[1], "yetkiler": kullanici[2]}
+        else:
+            return None
+    except sqlite3.OperationalError:
+        return None
 
 def otomatik_hasta_id_uret():
     try:
