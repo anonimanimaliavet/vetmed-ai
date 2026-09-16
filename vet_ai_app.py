@@ -24,6 +24,7 @@ def veritabani_baglanti_ve_kontrol():
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
+        # 1. Vakalar Tablosu
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='vakalar';")
         if not cursor.fetchone():
             cursor.execute('''CREATE TABLE IF NOT EXISTS vakalar (
@@ -35,6 +36,16 @@ def veritabani_baglanti_ve_kontrol():
                     alt_u_l REAL, ast_u_l REAL, alp_u_l REAL, gha_u_l REAL, total_bilirubin_mg_dl REAL, total_protein_g_dl REAL, albumin_g_dl REAL, globulin_g_dl REAL, amylase_u_l REAL, 
                     lipase_u_l REAL, potassium_mmol_l REAL, sodium_mmol_l REAL, chloride_mmol_l REAL, calcium_mg_dl REAL, phosphorus_mg_dl REAL, total_co2_mmol_l REAL, final_diagnosis TEXT
                 )''')
+                
+        # 2. Kullanıcılar Tablosu (ESKİ YAPI SİLİNDİ, YENİ YAPI EKLENDİ)
+        cursor.execute('''CREATE TABLE IF NOT EXISTS kullanicilar
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  kullanici_adi TEXT UNIQUE,
+                  sifre TEXT,
+                  aktif_mi INTEGER DEFAULT 1,
+                  yetkili_moduller TEXT DEFAULT 'AI Teşhis Asistanı, Pre-Op (Cerrahi Hazırlık), Çoklu Röntgen & Hibrit Konsültasyon, Detaylı Vaka Girişi & Güvenlik')''')
+        
+        # 3. Hastalıklar Tablosu
         cursor.execute("CREATE TABLE IF NOT EXISTS hastaliklar (hastalik_adi TEXT PRIMARY KEY)")
         
         varsayilan_tanilar = ['Sağlıklı/klinik olarak anlamlı patoloji yok', 'Böbrek hastalığı', 'Hepatobiliyer hastalık', 'Gastrointestinal hastalık', 'Solunum sistemi hastalığı', 'Endokrin/metabolik hastalık', 'Enfeksiyöz hastalık', 'Ortopedik Hastalık']
@@ -48,8 +59,6 @@ def veritabani_baglanti_ve_kontrol():
         return sayi
     except Exception:
         return 0
-
-aktif_vaka_sayisi = veritabani_baglanti_ve_kontrol()
 
 # --- SUPABASE VE GÜVENLİK ---
 SUPABASE_URL = "https://ukwskngnerynnuygrzrl.supabase.co"
