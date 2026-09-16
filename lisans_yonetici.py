@@ -323,7 +323,24 @@ conn.close()
 
 # Eğer kullanıcı varsa listele (Eski kodunuz buradan itibaren aynı kalabilir)
 if kullanicilar:
-    # ...
+    # Tablo başlıkları
+    col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+    col1.markdown("**Kullanıcı Adı**")
+    col2.markdown("**Durum**")
+    col3.markdown("**İşlem**")
+    col4.markdown("**Sil**")
+    
+    # Kullanıcıları satır satır yazdır
+    for user in kullanicilar:
+        # İŞTE EKSİK OLAN VE HATAYI YARATAN SATIR BURASIYDI:
+        user_id = user[0]
+        k_adi = user[1]
+        aktif_mi = user[2]
+        
+        c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
+        
+        c1.write(k_adi)
+        
         # Durum Göstergesi
         durum_metin = "🟢 Aktif" if aktif_mi == 1 else "🔴 Pasif"
         c2.write(durum_metin)
