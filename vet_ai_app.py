@@ -1,4 +1,184 @@
 import streamlit as st
+import datetime
+import time
+from supabase import create_client, Client
+from streamlit_cookies_controller import CookieController
+
+import json
+import os
+
+CONFIG_FILE = "config.json"
+
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"open_access_mode": False}
+
+def save_config(config_data):
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(config_data, f, indent=4)
+
+# --- 1. SUPABASE VE BAĞLANTI AYARLARI ---
+SUPABASE_URL = "https://ukwskngnerynnuygrzrl.supabase.co"
+SUPABASE_KEY = "sb_publishable_lRMxOBQ5V-lG_OCMFThG_g_iqCgin_i"
+
+def init_supabase():
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+supabase = init_supabase()
+controller = CookieController()
+
+# --- 2. OTURUM DURUMU VE GÜNCEL ŞALTER KONTROLÜ ---
+if "lisans_onaylandi" not in st.session_state:
+    st.session_state.lisans_onaylandi = False
+
+try:
+    # Veritabanından güncel şalter durumlarını anlık çek
+    sistem_ayar = supabase.table("sistem_ayarlari").select("*").eq("id", 1).execute().data[0]
+    
+    acik_erisim = sistem_ayar.get("acik_erisim", False)
+    lisans_aktif = sistem_ayar.get("lisans_aktif", False)
+    kullanici_aktif = sistem_ayar.get("kullanici_aktif", False)
+    
+    # KONTROL 1: Eğer hepsi kapalıysa, içerideki kim varsa oturumunu düşür!
+    if not acik_erisim and not lisans_aktif and not kullanici_aktif:
+        st.session_state.lisans_onaylandi = False
+        try:
+            controller.remove('sureli_lisans')
+        except:
+            pass
+            
+    # KONTROL 2: Açık Erişim aktifse direkt içeri al
+    elif acik_erisim:
+        st.session_state.lisans_onaylandi = True
+
+except:
+    pass
+
+# Eğer açık erişim kapalıysa ve tüm giriş yöntemleri kapandıysa direkt durdur
+try:
+    sistem_ayar = supabase.table("sistem_ayarlari").select("*").eq("id", 1).execute().data[0]
+    if not sistem_ayar.get("acik_erisim", False) and not sistem_ayar.get("lisans_aktif", False) and not sistem_ayar.get("kullanici_aktif", False):
+        if not st.session_state.lisans_onaylandi:
+            st.title("🔐 VetMed AI - Kurumsal Giriş")
+            st.warning("⛔ Sistem girişleri ve açık erişim geçici olarak tamamen kapatılmıştır.")
+            st.stop()
+except:
+    pass
+
+# Yönetici panelinden Açık Erişim şalteri açıldıysa girişleri direkt atla
+try:
+    sistem_ayar = supabase.table("sistem_ayarlari").select("*").eq("id", 1).execute().data[0]
+    if sistem_ayar.get("acik_erisim", False):
+        st.session_state.lisans_onaylandi = True
+except:
+    pass
+
+# Eğer daha önceden çıkış yapılmadıysa ve çerez varsa hatırla
+kayitli_sureli_lisans = controller.get('sureli_lisans')
+if kayitli_sureli_lisans and not st.session_state.lisans_onaylandi:
+    try:
+        res = supabase.table("lisanslar").select("*").eq("lisans_kodu", kayitli_sureli_lisans).execute()
+        if len(res.data) > 0:
+            l_data = res.data[0]
+            if l_data["aktif"] and l_data["lisans_tipi"] == "sureli":
+                bitis_tarihi = datetime.datetime.fromisoformat(l_data["son_kullanma_tarihi"])
+                su_an = datetime.datetime.now(bitis_tarihi.tzinfo) if bitis_tarihi.tzinfo else datetime.datetime.now()
+                if su_an <= bitis_tarihi:
+                    st.session_state.lisans_onaylandi = True
+    except:
+        pass
+
+
+# =========================================================
+# --- 3. GİRİŞ EKRANI ---
+# =========================================================
+if not st.session_state.lisans_onaylandi:
+    st.title("🔐 VetMed AI - Kurumsal Giriş")
+    
+    try:
+        ayarlar = supabase.table("sistem_ayarlari").select("*").eq("id", 1).execute().data[0]
+        
+        if not ayarlar["lisans_aktif"] and not ayarlar["kullanici_aktif"]:
+            st.warning("⛔ Sistem girişleri geçici olarak kapatılmıştır.")
+            st.stop()
+            
+        sekme_listesi = []
+        if ayarlar["lisans_aktif"]: sekme_listesi.append("🔑 Lisans ile Giriş")
+        if ayarlar["kullanici_aktif"]: sekme_listesi.append("👤 Kullanıcı Girişi")
+        
+        sekmeler = st.tabs(sekme_listesi)
+        idx = 0
+        
+        # Lisans Sekmesi
+        if ayarlar["lisans_aktif"]:
+            with sekmeler[idx]:
+                st.info("Geçerli bir lisans kodu giriniz.")
+                girilen_kod = st.text_input("Lisans Kodu:", type="password", key="l_input")
+                
+                if st.button("Lisans ile Giriş Yap", key="btn_lisans_giris"):
+                    res = supabase.table("lisanslar").select("*").eq("lisans_kodu", girilen_kod).execute()
+                    if len(res.data) > 0:
+                        l_data = res.data[0]
+                        if not l_data["aktif"]:
+                            st.error("❌ Lisans iptal edilmiş.")
+                        elif l_data["lisans_tipi"] == "sureli":
+                            bitis_tarihi = datetime.datetime.fromisoformat(l_data["son_kullanma_tarihi"])
+                            su_an = datetime.datetime.now(bitis_tarihi.tzinfo) if bitis_tarihi.tzinfo else datetime.datetime.now()
+                            if su_an > bitis_tarihi:
+                                st.error("❌ Lisans süresi dolmuş!")
+                            else:
+                                st.success("✅ Süreli Lisans Doğrulandı!")
+                                controller.set('sureli_lisans', girilen_kod, max_age=30*24*60*60)
+                                time.sleep(0.5)
+                                st.session_state.lisans_onaylandi = True
+                                st.rerun()
+                        elif l_data["lisans_tipi"] == "kullanim":
+                            if l_data["kullanilan"] < l_data["max_kullanim"]:
+                                supabase.table("lisanslar").update({
+                                    "kullanilan": l_data["kullanilan"] + 1,
+                                    "aktif": (l_data["kullanilan"] + 1) < l_data["max_kullanim"]
+                                }).eq("lisans_kodu", girilen_kod).execute()
+                                st.success("✅ Kullanımlık Lisans Doğrulandı!")
+                                st.session_state.lisans_onaylandi = True
+                                st.rerun()
+                            else:
+                                st.error("❌ Kullanım hakkı dolmuş!")
+                    else:
+                        st.error("❌ Geçersiz kod!")
+            idx += 1
+            
+        # Kullanıcı Sekmesi
+        if ayarlar["kullanici_aktif"]:
+            with sekmeler[idx]:
+                st.info("Kullanıcı adı ve şifrenizle giriş yapın.")
+                k_adi = st.text_input("Kullanıcı Adı:", key="k_input")
+                k_sifre = st.text_input("Şifre:", type="password", key="s_input")
+                
+                if st.button("Kullanıcı ile Giriş Yap", key="btn_kul_giris"):
+                    res = supabase.table("kullanicilar").select("*").eq("kullanici_adi", k_adi).execute()
+                    if len(res.data) > 0:
+                        if res.data[0]["sifre"] == k_sifre:
+                            st.success(f"✅ Hoş geldin, {k_adi}!")
+                            st.session_state.lisans_onaylandi = True
+                            st.rerun()
+                        else:
+                            st.error("❌ Hatalı şifre!")
+                    else:
+                        st.error("❌ Kullanıcı bulunamadı!")
+                        
+    except Exception as e:
+        st.error(f"Bağlantı veya Yükleme Hatası: {e}")
+
+    st.stop()
+
+
+# =========================================================
+# --- 4. ASIL ANA UYGULAMA (Giriş yapıldıktan sonra çalışır) ---
+# =========================================================
+
+import streamlit as st
 import pandas as pd
 import xgboost as xgb
 from sklearn.preprocessing import LabelEncoder
@@ -19,12 +199,10 @@ def veritabani_baglanti_ve_kontrol():
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
-        # Vakalar tablosu var mı kontrol et
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='vakalar';")
         tablo_varmi = cursor.fetchone()
         
         if not tablo_varmi:
-            # Tablo yoksa sıfırdan oluştur
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS vakalar (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,7 +235,6 @@ def veritabani_baglanti_ve_kontrol():
             )
         ''')
         
-        # Varsayılan kullanıcılar
         cursor.execute("SELECT COUNT(*) FROM kullanicilar")
         if cursor.fetchone()[0] == 0:
             admin_hash = hashlib.sha256("vetmed2026".encode()).hexdigest()
@@ -65,7 +242,6 @@ def veritabani_baglanti_ve_kontrol():
             cursor.execute("INSERT OR IGNORE INTO kullanicilar VALUES (?, ?)", ("admin", admin_hash))
             cursor.execute("INSERT OR IGNORE INTO kullanicilar VALUES (?, ?)", ("hekim", hekim_hash))
             
-        # Varsayılan hastalıklar
         varsayilan_tanilar = [
             'Sağlıklı/klinik olarak anlamlı patoloji yok', 'Böbrek hastalığı',
             'Hepatobiliyer hastalık', 'Gastrointestinal hastalık',
@@ -77,7 +253,6 @@ def veritabani_baglanti_ve_kontrol():
             
         conn.commit()
         
-        # Canlı kayıt sayısını al
         cursor.execute("SELECT COUNT(*) FROM vakalar")
         sayi = cursor.fetchone()[0]
         conn.close()
@@ -120,7 +295,7 @@ def otomatik_hasta_id_uret():
         pass
     return f"P{np.random.randint(5001, 9999)}"
 
-st.sidebar.image("https://cdn-icons-png.flaticon.com/512/2138/2138243.png", width=100)
+# Kedi görseli ve çıkış butonu kaldırıldı, sadece menü kaldı
 st.sidebar.title("🏥 VetMed Klinik Portal")
 secilen_sayfa = st.sidebar.radio("Modül Seçimi:", [
     "🩺 AI Teşhis Asistanı", 
@@ -130,7 +305,6 @@ secilen_sayfa = st.sidebar.radio("Modül Seçimi:", [
 ])
 st.sidebar.divider()
 
-# Yan menüde canlı durum göstergesi
 if aktif_vaka_sayisi > 0:
     st.sidebar.success(f"🟢 DB Bağlantısı Sağlıklı\n📊 Aktif Vaka: {aktif_vaka_sayisi} adet")
 else:
@@ -661,8 +835,8 @@ elif secilen_sayfa == "📂 Detaylı Vaka Girişi & Güvenlik":
                         'lym_pct': p_lym, 'mon_pct': p_mon, 'eos_pct': p_eos, 'mcv_fl': p_mcv, 'mchc_g_dl': p_mchc,
                         'reticulocyte_pct': p_ret, 'glucose_mg_dl': p_glu, 'urea_mg_dl': p_urea, 'creatinine_mg_dl': p_crea,
                         'alt_u_l': p_alt, 'ast_u_l': p_ast, 'alp_u_l': p_alp, 'gha_u_l': p_gha, 'total_bilirubin_mg_dl': p_tbili,
-                        'total_protein_g_dl': p_tp, 'albumin_g_dl': p_alb, 'globulin_g_dl': glob, 'amylase_u_l': p_amyl,
-                        'lipase_u_l': p_lip, 'potassium_mmol_l': p_pot, 'sodium_mmol_l': sod, 'chloride_mmol_l': p_chlor,
+                        'total_protein_g_dl': p_tp, 'albumin_g_dl': p_alb, 'globulin_g_dl': p_glob, 'amylase_u_l': p_amyl,
+                        'lipase_u_l': p_lip, 'potassium_mmol_l': p_pot, 'sodium_mmol_l': p_sod, 'chloride_mmol_l': p_chlor,
                         'calcium_mg_dl': p_calc, 'phosphorus_mg_dl': p_phos, 'total_co2_mmol_l': p_co2, 'final_diagnosis': p_tani
                     }])
                     yeni_kayit_df.to_sql('vakalar', conn_v, if_exists='append', index=False)
