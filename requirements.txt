@@ -6,3 +6,4 @@ xgboost
 scikit-learn
 numpy
 requests
+google-generativeai

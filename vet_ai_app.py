@@ -262,7 +262,7 @@ def veritabani_baglanti_ve_kontrol():
 
 aktif_vaka_sayisi = veritabani_baglanti_ve_kontrol()
 
-SECURE_GEMINI_API_KEY = "AQ.Ab8RN6LMUjQziHwdZ-sZd3VVln6PrUoQI1Nbdqxem0HL0smz_A" 
+SECURE_GEMINI_API_KEY = "AQ.Ab8RN6JG6SMUc1HDjYfkMDZOVP3qhB80U35FTphFCaqBkA8s5g" 
 
 def guvenlik_dogrula(kullanici_input, sifre_input):
     if not kullanici_input or not sifre_input:
