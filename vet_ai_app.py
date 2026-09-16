@@ -63,24 +63,26 @@ supabase = init_supabase()
 controller = CookieController()
 SECURE_GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
-
 # --- YENİ EKLENEN KUSURSUZ KREDİ DÜŞÜRME FONKSİYONU ---
 def kredi_dusur(kullanici_adi, kredi_sutunu):
-    """Krediyi veritabanından düşer, Supabase sessizce reddederse işlemi iptal eder."""
+    """Krediyi veritabanından düşer, hata varsa nedenini ekrana açıkça yazar."""
     try:
         res = supabase.table("kullanicilar").select("*").eq("kullanici_adi", kullanici_adi).execute()
         if not res.data:
+            st.error("🚨 HATA: Kullanıcı Supabase'de bulunamadı!")
             return False, 0
             
         user = res.data[0]
-        mevcut_kredi = int(user.get(kredi_sutunu, 0))
+        
+        # Eğer Supabase'de tablo hücresi NULL (boş) kalmışsa çökmeyi önleyen düzeltme:
+        ham_kredi = user.get(kredi_sutunu)
+        mevcut_kredi = int(ham_kredi) if ham_kredi is not None else 0
         
         if mevcut_kredi <= 0:
             return False, 0
             
         yeni_kredi = mevcut_kredi - 1
         
-        # Güncellemeyi doğrudan ID üzerinden yaparak Supabase sessiz hatalarını engelliyoruz
         if "id" in user:
             upd_res = supabase.table("kullanicilar").update({kredi_sutunu: yeni_kredi}).eq("id", user["id"]).execute()
         else:
@@ -90,12 +92,13 @@ def kredi_dusur(kullanici_adi, kredi_sutunu):
         if upd_res.data and len(upd_res.data) > 0:
             return True, yeni_kredi
         else:
+            st.error(f"🚨 SUPABASE REDDETTİ: Veritabanına yazma izni yok. '{kredi_sutunu}' sütununuz hatalı olabilir.")
             return False, mevcut_kredi
             
     except Exception as e:
+        st.error(f"🚨 YAZILIMSAL HATA: {e}")
         return False, 0
 # --------------------------------------------------------
-
 
 def kullanici_dogrula(girilen_kullanici, girilen_sifre):
     try:
