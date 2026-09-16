@@ -672,8 +672,8 @@ elif secilen_sayfa == "📸 Çoklu Röntgen & Hibrit Konsültasyon":
                     st.write(ai_metin)
                 else:
                     st.divider()
-                    st.subheader("📑 Konsültasyon Raporu (Simülasyon)")
-                    st.markdown(f"* **Değerlendirme:** Klinik parametreler ({r_ates}°C) ve mevcut lab verileri sentezlenmiştir.")
+                    st.error(f"❌ API Bağlantı Hatası (Kod: {response.status_code})")
+                    st.write("API Yanıtı:", response.text) # Hatanın detayını ekrana basar
             except Exception as e:
                 st.error(f"Bağlantı hatası: {e}")
 
