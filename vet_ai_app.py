@@ -213,7 +213,6 @@ secilen_sayfa = st.sidebar.radio("Modül Seçimi:", [
 st.sidebar.divider()
 
 # MODÜL YETKİ (RBAC) KONTROLÜ
-# Seçilen sayfanın emojisiz temiz adını alıyoruz (Örn: "AI Teşhis Asistanı")
 secilen_sayfa_temiz = secilen_sayfa.split(" ", 1)[1]
 
 if st.session_state.get("giris_turu") == "kullanici":
@@ -399,29 +398,139 @@ elif secilen_sayfa == "✂️ Pre-Op (Cerrahi Hazırlık)":
         
         for p in protokoller: st.markdown(f"- {p}")
 
-# ================= SAYFA 3: RÖNTGEN =================
+# ================= SAYFA 3: RÖNTGEN VE HİBRİT KONSÜLTASYON (ORİJİNAL DETAYLI HALİ) =================
 elif secilen_sayfa == "📸 Çoklu Röntgen & Hibrit Konsültasyon":
     st.title("📸 Çoklu Radyografi ve Hibrit Klinik Konsültasyon")
-    yuklenen_fotolar = st.file_uploader("Birden Fazla Röntgen Görüntüsü Yükleyin", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+    st.markdown("Yüklenen röntgen görsellerini hastanın eksiksiz hemogram, biyokimya ve elektrolit parametreleriyle birlikte 'Veri Yok' esnekliğiyle analiz eder.")
+    
+    yuklenen_fotolar = st.file_uploader("Birden Fazla Röntgen Görüntüsü Yükleyin (JPG, PNG)", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+    
     if yuklenen_fotolar:
-        cols = st.columns(min(len(yuklenen_fotolar), 4))
+        st.subheader("🖼️ Yüklenen Radyografiler Önizlemesi")
+        cols = st.columns(len(yuklenen_fotolar) if len(yuklenen_fotolar) <= 4 else 4)
         for idx, foto in enumerate(yuklenen_fotolar):
-            with cols[idx % 4]: st.image(foto, caption=f"Grafi {idx+1}", use_container_width=True)
+            with cols[idx % 4]:
+                st.image(foto, caption=f"Grafi {idx+1}", use_container_width=True)
 
-    r_notlar = st.text_input("Ek Klinik Semptomlar / Notlar", value="Röntgen analiz talebi.")
-    if st.button("🔍 Röntgen Analiz Et", type="primary", use_container_width=True):
-        with st.spinner('Yapay zeka analiz ediyor...'):
+    st.divider()
+    with st.expander("📋 Hastanın Klinik ve Laboratuvar Parametreleri", expanded=True):
+        rc1, rc2, rc3, rc4 = st.columns(4)
+        r_tur = rc1.selectbox("Tür", ["Köpek", "Kedi"], key="r_tur")
+        r_yas = rc2.number_input("Yaş (Yıl)", value=3.0, step=0.5, key="r_yas")
+        r_ates = rc3.number_input("Vücut Isısı (°C)", value=38.5, step=0.1, key="r_ates")
+        r_solunum = rc4.number_input("Solunum Sayısı (Nfes/dk)", value=24, key="r_solunum")
+        
+        st.markdown("--- **Hemogram (CBC)** ---")
+        r_hemogram_yok = st.checkbox("❌ Hemogram Verisi Yok", key="r_hemogram_yok")
+        if not r_hemogram_yok:
+            hb1, hb2, hb3, hb4 = st.columns(4)
+            r_wbc = hb1.number_input("WBC", value=10.0, key="r_wbc")
+            r_rbc = hb2.number_input("RBC", value=6.5, key="r_rbc")
+            r_hgb = hb3.number_input("HGB", value=14.0, key="r_hgb")
+            r_hct = hb4.number_input("HCT (%)", value=42.0, key="r_hct")
+
+            hb5, hb6, hb7, hb8 = st.columns(4)
+            r_plt = hb5.number_input("PLT", value=300.0, key="r_plt")
+            r_lym = hb6.number_input("LYM (%)", value=30.0, key="r_lym")
+            r_mon = hb7.number_input("MON (%)", value=5.0, key="r_mon")
+            r_eos = hb8.number_input("EOS (%)", value=3.0, key="r_eos")
+
+            hb9, hb10, hb11, _ = st.columns(4)
+            r_mcv = hb9.number_input("MCV", value=70.0, key="r_mcv")
+            r_mchc = hb10.number_input("MCHC", value=33.0, key="r_mchc")
+            r_ret = hb11.number_input("Retikülosit (%)", value=1.0, key="r_ret")
+        else:
+            r_wbc, r_rbc, r_hgb, r_hct, r_plt, r_lym, r_mon, r_eos, r_mcv, r_mchc, r_ret = "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok"
+
+        st.markdown("--- **Biyokimya & Enzimler** ---")
+        r_biyokimya_yok = st.checkbox("❌ Biyokimya Verisi Yok", key="r_biyokimya_yok")
+        if not r_biyokimya_yok:
+            bb1, bb2, bb3, bb4 = st.columns(4)
+            r_glu = bb1.number_input("Glukoz", value=100.0, key="r_glu")
+            r_urea = bb2.number_input("Üre (BUN)", value=25.0, key="r_urea")
+            r_crea = bb3.number_input("Kreatinin", value=1.0, key="r_crea")
+            r_alt = bb4.number_input("ALT", value=45.0, key="r_alt")
+
+            bb5, bb6, bb7, bb8 = st.columns(4)
+            r_ast = bb5.number_input("AST", value=35.0, key="r_ast")
+            r_alp = bb6.number_input("ALP", value=60.0, key="r_alp")
+            r_gha = bb7.number_input("GGT", value=5.0, key="r_gha")
+            r_tbili = bb8.number_input("Total Bilirubin", value=0.4, key="r_tbili")
+
+            bb9, bb10, bb11, bb12 = st.columns(4)
+            r_tp = bb9.number_input("Total Protein", value=6.8, key="r_tp")
+            r_alb = bb10.number_input("Albumin", value=3.4, key="r_alb")
+            r_glob = bb11.number_input("Globulin", value=3.4, key="r_glob")
+            r_amyl = bb12.number_input("Amilaz", value=500.0, key="r_amyl")
+
+            bb13, _, _, _ = st.columns(4)
+            r_lip = bb13.number_input("Lipaz", value=400.0, key="r_lip")
+        else:
+            r_glu, r_urea, r_crea, r_alt, r_ast, r_alp, r_gha, r_tbili, r_tp, r_alb, r_glob, r_amyl, r_lip = "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok"
+
+        st.markdown("--- **Elektrolitler & Kan Gazı** ---")
+        r_elektrolit_yok = st.checkbox("❌ Elektrolit Verisi Yok", key="r_elektrolit_yok")
+        if not r_elektrolit_yok:
+            eb1, eb2, eb3, eb4 = st.columns(4)
+            r_pot = eb1.number_input("Potasyum (K)", value=4.2, key="r_pot")
+            r_sod = eb2.number_input("Sodyum (Na)", value=145.0, key="r_sod")
+            r_chlor = eb3.number_input("Klor (Cl)", value=110.0, key="r_chlor")
+            r_calc = eb4.number_input("Kalsiyum (Ca)", value=10.0, key="r_calc")
+
+            eb5, eb6, _, _ = st.columns(4)
+            r_phos = eb5.number_input("Fosfor (P)", value=4.0, key="r_phos")
+            r_co2 = eb6.number_input("Total CO2", value=20.0, key="r_co2")
+        else:
+            r_pot, r_sod, r_chlor, r_calc, r_phos, r_co2 = "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok", "Veri Yok"
+
+        r_notlar = st.text_input("Ek Klinik Semptomlar / Notlar", value="Hibrit konsültasyon talep ediliyor.")
+
+    analiz_baslat = st.button("🔍 Röntgen ve Lab Verilerini Eş Zamanlı Analiz Et", type="primary", use_container_width=True)
+
+    if analiz_baslat:
+        with st.spinner('Yapay zeka röntgen piksellerini ve laboratuvar verilerini sentezliyor...'):
             try:
-                parts_list = [{"text": f"Veteriner radyologsun. Ek not: {r_notlar}. Analiz et."}]
-                for foto in yuklenen_fotolar:
-                    parts_list.append({"inline_data": {"mime_type": foto.type, "data": base64.b64encode(foto.getvalue()).decode("utf-8")}})
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={SECURE_GEMINI_API_KEY.strip()}"
-                response = requests.post(url, json={"contents": [{"parts": parts_list}]})
+                parts_list = []
+                foto_bilgi = f"{len(yuklenen_fotolar)} adet röntgen görseli yüklenmiştir." if yuklenen_fotolar else "Röntgen görseli yüklenmemiştir."
+                
+                prompt = f"""
+                Sen kıdemli bir veteriner dahiliye uzmanı, cerrah ve radyologsun. Sana bu hasta için {foto_bilgi} ve şu klinik/laboratuvar parametreler sunulmuştur:
+                - Tür: {r_tur} | Yaş: {r_yas} | Ateş: {r_ates}°C | Solunum: {r_solunum}/dk
+                - Hemogram: WBC={r_wbc}, RBC={r_rbc}, HGB={r_hgb}, HCT={r_hct}%, PLT={r_plt}, LYM={r_lym}%, MON={r_mon}%, EOS={r_eos}%, MCV={r_mcv}, MCHC={r_mchc}, Retikülosit={r_ret}%
+                - Biyokimya: Glukoz={r_glu}, Üre={r_urea}, Kreatinin={r_crea}, ALT={r_alt}, AST={r_ast}, ALP={r_alp}, GGT={r_gha}, Total Bilirubin={r_tbili}, Total Protein={r_tp}, Albumin={r_alb}, Globulin={r_glob}, Amilaz={r_amyl}, Lipaz={r_lip}
+                - Elektrolitler: Potasyum={r_pot}, Sodyum={r_sod}, Klor={r_chlor}, Kalsiyum={r_calc}, Fosfor={r_phos}, Total CO2={r_co2}
+                - Ek Notlar: {r_notlar}
+
+                Lütfen yüklenen görseller ile bu laboratuvar ve klinik bulgularını çapraz bağlayarak kapsamlı bir rapor sun. Şu formatı kullan:
+                1. **Radyolojik ve Klinik Bulguların Sentezi**
+                2. **Kesin Vaka Teşhisi**
+                3. **Medikal / Cerrahi Tedavi ve Reçete Protokolü**
+                """
+                parts_list.append({"text": prompt})
+                
+                if yuklenen_fotolar:
+                    for foto in yuklenen_fotolar:
+                        encoded_img = base64.b64encode(foto.getvalue()).decode("utf-8")
+                        parts_list.append({"inline_data": {"mime_type": foto.type, "data": encoded_img}})
+                
+                api_key_temiz = SECURE_GEMINI_API_KEY.strip()
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key_temiz}"
+                
+                payload = {"contents": [{"parts": parts_list}]}
+                response = requests.post(url, json=payload)
+                
                 if response.status_code == 200:
-                    st.write(response.json()['candidates'][0]['content']['parts'][0]['text'])
+                    result = response.json()
+                    ai_metin = result['candidates'][0]['content']['parts'][0]['text']
+                    st.divider()
+                    st.subheader("📑 Konsültasyon Raporu")
+                    st.write(ai_metin)
                 else:
-                    st.error("API Hatası.")
-            except Exception as e: st.error(f"Bağlantı hatası: {e}")
+                    st.divider()
+                    st.error(f"❌ API Bağlantı Hatası (Kod: {response.status_code})")
+                    st.write("API Yanıtı:", response.text)
+            except Exception as e:
+                st.error(f"Bağlantı hatası: {e}")
 
 # ================= SAYFA 4: GÜVENLİK VE VERİ GİRİŞİ =================
 elif secilen_sayfa == "📂 Detaylı Vaka Girişi & Güvenlik":
