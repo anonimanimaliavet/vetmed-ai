@@ -1,32 +1,11 @@
 import datetime
 import uuid
-import os
-import sqlite3
 import streamlit as st
 from supabase import create_client, Client
 
 st.set_page_config(page_title="VetMed Admin Paneli", page_icon="⚙️", layout="centered")
 
-# --- VERİTABANI YOLU VE GÜVENLİK ---
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "vetmed_klinik.db")
-
-def tablolari_garantiye_al():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    # Kendi kendini onaran ve modül yetkilerini içeren tam tablo yapısı
-    c.execute('''CREATE TABLE IF NOT EXISTS kullanicilar
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  kullanici_adi TEXT UNIQUE,
-                  sifre TEXT,
-                  aktif_mi INTEGER DEFAULT 1,
-                  yetkili_moduller TEXT DEFAULT 'AI Teşhis Asistanı, Pre-Op (Cerrahi Hazırlık), Çoklu Röntgen & Hibrit Konsültasyon, Detaylı Vaka Girişi & Güvenlik')''')
-    conn.commit()
-    conn.close()
-
-tablolari_garantiye_al()
-
-# --- SUPABASE BAĞLANTISI (Sadece Lisanslar ve Ayarlar İçin) ---
+# --- SUPABASE BAĞLANTISI ---
 SUPABASE_URL = "https://ukwskngnerynnuygrzrl.supabase.co"
 SUPABASE_KEY = "sb_publishable_lRMxOBQ5V-lG_OCMFThG_g_iqCgin_i"
 YONETICI_SIFRESI = "vetmed2026"
@@ -54,7 +33,7 @@ if not st.session_state.admin_giris_yapildi:
             st.error("❌ Hatalı şifre girdiniz!")
     st.stop()
 
-# --- 2. YÖNETİCİ PANELİ (GİRİŞ BAŞARILIYSA GÖRÜNÜR) ---
+# --- 2. YÖNETİCİ PANELİ ---
 st.title("⚙️ VetMed AI - Yönetici Paneli")
 
 if st.sidebar.button("🚪 Çıkış Yap"):
@@ -122,7 +101,7 @@ with tab2:
     except Exception as e:
         st.error(f"Veriler çekilirken hata oluştu: {e}")
 
-# --- SEKME 3: SİSTEM ŞALTERLERİ VE KULLANICILAR ---
+# --- SEKME 3: SİSTEM ŞALTERLERİ VE KULLANICILAR (SUPABASE ENTEGRELİ) ---
 with tab3:
     st.header("Sistem Giriş Şalterleri")
     ayarlar = supabase.table("sistem_ayarlari").select("*").eq("id", 1).execute().data[0]
@@ -138,9 +117,9 @@ with tab3:
         st.success("Giriş ayarları güncellendi!")
         
     st.divider()
-    st.header("👥 Kullanıcı (Personel) Yönetimi")
+    st.header("👥 Bulut Kullanıcı Yönetimi (Supabase)")
     
-    # KULLANICI EKLEME ALANI
+    # 1. KULLANICI EKLEME
     modul_listesi = ["AI Teşhis Asistanı", "Pre-Op (Cerrahi Hazırlık)", "Çoklu Röntgen & Hibrit Konsültasyon", "Detaylı Vaka Girişi & Güvenlik"]
     
     with st.expander("➕ Yeni Kullanıcı Ekle"):
@@ -149,35 +128,34 @@ with tab3:
             yeni_sifre = st.text_input("Şifre", type="password")
             secilen_moduller = st.multiselect("Erişilebilecek Modülleri Seçin", modul_listesi, default=modul_listesi)
             
-            if st.form_submit_button("Kullanıcıyı Kaydet"):
+            if st.form_submit_button("Buluta Kaydet"):
                 if yeni_kullanici and yeni_sifre:
+                    modul_metni = ", ".join(secilen_moduller)
                     try:
-                        modul_metni = ", ".join(secilen_moduller) 
-                        conn = sqlite3.connect(DB_PATH)
-                        c = conn.cursor()
-                        c.execute("INSERT INTO kullanicilar (kullanici_adi, sifre, aktif_mi, yetkili_moduller) VALUES (?, ?, ?, ?)", 
-                                  (yeni_kullanici, yeni_sifre, 1, modul_metni))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"'{yeni_kullanici}' başarıyla kaydedildi!")
-                        st.rerun()
-                    except sqlite3.IntegrityError:
-                        st.error("❌ Bu kullanıcı adı zaten mevcut!")
+                        # Kullanıcı var mı kontrolü
+                        kontrol = supabase.table("kullanicilar").select("*").eq("kullanici_adi", yeni_kullanici).execute()
+                        if len(kontrol.data) > 0:
+                            st.error("❌ Bu kullanıcı adı zaten mevcut!")
+                        else:
+                            supabase.table("kullanicilar").insert({
+                                "kullanici_adi": yeni_kullanici,
+                                "sifre": yeni_sifre,
+                                "aktif_mi": True,
+                                "yetkili_moduller": modul_metni
+                            }).execute()
+                            st.success(f"'{yeni_kullanici}' başarıyla Supabase bulutuna kaydedildi!")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Kayıt Hatası: {e}")
                 else:
                     st.warning("Kullanıcı adı ve şifre zorunludur.")
 
-    # KULLANICI LİSTELEME ALANI
+    # 2. KULLANICI LİSTELEME VE DÜZENLEME
     st.subheader("Mevcut Kullanıcılar")
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
     try:
-        c.execute("SELECT id, kullanici_adi, aktif_mi FROM kullanicilar")
-        kullanicilar = c.fetchall()
-    except sqlite3.OperationalError:
-        c.execute("DROP TABLE IF EXISTS kullanicilar")
-        tablolari_garantiye_al()
+        kullanicilar = supabase.table("kullanicilar").select("*").order("id").execute().data
+    except Exception:
         kullanicilar = []
-    conn.close()
 
     if kullanicilar:
         col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
@@ -187,26 +165,21 @@ with tab3:
         col4.markdown("**Sil**")
         
         for user in kullanicilar:
-            user_id, k_adi, aktif_mi = user[0], user[1], user[2]
+            user_id = user["id"]
+            k_adi = user["kullanici_adi"]
+            aktif_mi = user.get("aktif_mi", True)
+            
             c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
             c1.write(k_adi)
-            c2.write("🟢 Aktif" if aktif_mi == 1 else "🔴 Pasif")
+            c2.write("🟢 Aktif" if aktif_mi else "🔴 Pasif")
             
-            if c3.button("Pasif Yap" if aktif_mi == 1 else "Aktif Yap", key=f"durum_{user_id}"):
-                yeni_durum = 0 if aktif_mi == 1 else 1
-                conn = sqlite3.connect(DB_PATH)
-                c = conn.cursor()
-                c.execute("UPDATE kullanicilar SET aktif_mi = ? WHERE id = ?", (yeni_durum, user_id))
-                conn.commit()
-                conn.close()
+            if c3.button("Pasif Yap" if aktif_mi else "Aktif Yap", key=f"durum_{user_id}"):
+                yeni_durum = not aktif_mi
+                supabase.table("kullanicilar").update({"aktif_mi": yeni_durum}).eq("id", user_id).execute()
                 st.rerun()
                 
             if c4.button("❌", key=f"sil_{user_id}"):
-                conn = sqlite3.connect(DB_PATH)
-                c = conn.cursor()
-                c.execute("DELETE FROM kullanicilar WHERE id = ?", (user_id,))
-                conn.commit()
-                conn.close()
+                supabase.table("kullanicilar").delete().eq("id", user_id).execute()
                 st.rerun()
     else:
-        st.info("Sistemde kayıtlı kullanıcı bulunmuyor.")
+        st.info("Bulut sisteminde henüz kayıtlı kullanıcı bulunmuyor.")
