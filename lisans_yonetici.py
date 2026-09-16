@@ -199,24 +199,31 @@ kullanici_tablosu_olustur()
 st.divider()
 st.header("👥 Kullanıcı Yönetimi")
 
-# --- HATA ÇÖZÜMÜ İÇİN GEÇİCİ BUTON ---
+# --- HATA ÇÖZÜMÜ İÇİN GEÇİCİ BUTON (GÜNCELLENDİ) ---
 if st.button("🚨 Bulut Veritabanını Onar / Sıfırla"):
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
+        
+        # 1. Eski sorunlu tabloyu tamamen sil
         c.execute("DROP TABLE IF EXISTS kullanicilar")
+        
+        # 2. Tabloyu en güncel haliyle (yetkili_moduller sütunuyla birlikte) SIFIRDAN YARAT
+        c.execute('''CREATE TABLE kullanicilar
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      kullanici_adi TEXT UNIQUE,
+                      sifre TEXT,
+                      aktif_mi INTEGER DEFAULT 1,
+                      yetkili_moduller TEXT DEFAULT 'AI Teşhis Asistanı, Pre-Op (Cerrahi Hazırlık), Çoklu Röntgen & Hibrit Konsültasyon')''')
+        
         conn.commit()
         conn.close()
         
-        # Tabloyu baştan, eksiksiz oluştur
-        kullanici_tablosu_olustur()
-        tabloya_modul_yetkisi_ekle()
-        
-        st.success("✅ Veritabanı başarıyla onarıldı! Lütfen sayfayı yenileyin.")
+        st.success("✅ Veritabanı başarıyla onarıldı! Sistem güncel.")
         st.rerun()
     except Exception as e:
         st.error(f"Onarım sırasında hata: {e}")
-# ------------------------------------
+# ---------------------------------------------------
 
 def tabloya_modul_yetkisi_ekle():
     conn = sqlite3.connect(DB_PATH)
