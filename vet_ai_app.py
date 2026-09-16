@@ -59,6 +59,8 @@ def veritabani_baglanti_ve_kontrol():
         return sayi
     except Exception:
         return 0
+    # Fonksiyonu çalıştırıp sonucu değişkene atayan eksik satır
+aktif_vaka_sayisi = veritabani_baglanti_ve_kontrol()
 
 # --- SUPABASE VE GÜVENLİK ---
 SUPABASE_URL = "https://ukwskngnerynnuygrzrl.supabase.co"
