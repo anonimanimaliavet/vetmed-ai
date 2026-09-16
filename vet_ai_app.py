@@ -63,8 +63,41 @@ supabase = init_supabase()
 controller = CookieController()
 SECURE_GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
+
+# --- YENİ EKLENEN KUSURSUZ KREDİ DÜŞÜRME FONKSİYONU ---
+def kredi_dusur(kullanici_adi, kredi_sutunu):
+    """Krediyi veritabanından düşer, Supabase sessizce reddederse işlemi iptal eder."""
+    try:
+        res = supabase.table("kullanicilar").select("*").eq("kullanici_adi", kullanici_adi).execute()
+        if not res.data:
+            return False, 0
+            
+        user = res.data[0]
+        mevcut_kredi = int(user.get(kredi_sutunu, 0))
+        
+        if mevcut_kredi <= 0:
+            return False, 0
+            
+        yeni_kredi = mevcut_kredi - 1
+        
+        # Güncellemeyi doğrudan ID üzerinden yaparak Supabase sessiz hatalarını engelliyoruz
+        if "id" in user:
+            upd_res = supabase.table("kullanicilar").update({kredi_sutunu: yeni_kredi}).eq("id", user["id"]).execute()
+        else:
+            upd_res = supabase.table("kullanicilar").update({kredi_sutunu: yeni_kredi}).eq("kullanici_adi", kullanici_adi).execute()
+        
+        # Güncelleme gerçekten veritabanına yansıdı mı?
+        if upd_res.data and len(upd_res.data) > 0:
+            return True, yeni_kredi
+        else:
+            return False, mevcut_kredi
+            
+    except Exception as e:
+        return False, 0
+# --------------------------------------------------------
+
+
 def kullanici_dogrula(girilen_kullanici, girilen_sifre):
-    """Kullanıcıyı SUPABASE bulut veritabanından doğrular."""
     try:
         res = supabase.table("kullanicilar").select("*").eq("kullanici_adi", girilen_kullanici).execute()
         if len(res.data) > 0:
@@ -72,10 +105,10 @@ def kullanici_dogrula(girilen_kullanici, girilen_sifre):
             if user["sifre"] == girilen_sifre and user.get("aktif_mi", True) == True:
                 return {"id": user["id"], "kullanici_adi": user["kullanici_adi"], "yetkiler": user.get("yetkili_moduller", "")}
             else:
-                st.error("🚨 HATA: Şifre yanlış veya kullanıcının 'aktif_mi' durumu kapalı.")
+                st.error("🚨 HATA: Şifre yanlış veya kullanıcının hesabı pasif.")
                 return None
         else:
-            st.error(f"🚨 HATA: '{girilen_kullanici}' adında bir kullanıcı Supabase tablosunda hiç yok!")
+            st.error(f"🚨 HATA: Kullanıcı bulunamadı!")
             return None
     except Exception as e:
         st.error(f"🚨 SUPABASE BAĞLANTI HATASI: {e}")
@@ -197,12 +230,9 @@ if not st.session_state.lisans_onaylandi:
                         st.session_state.lisans_onaylandi = True
                         st.session_state.giris_turu = "kullanici"
                         st.session_state.yetkili_moduller = user_data["yetkiler"]
-                        st.session_state.aktif_kullanici_adi = k_adi # Kredi sistemi için oturumu kaydettik
+                        st.session_state.aktif_kullanici_adi = k_adi 
                         time.sleep(0.5)
                         st.rerun()
-                    else:
-                        # Hata mesajları yukarıdaki kullanici_dogrula içerisinde zaten veriliyor
-                        pass
     except Exception as e:
         st.error(f"Bağlantı Hatası: {e}")
     st.stop()
@@ -349,19 +379,17 @@ if secilen_sayfa == "🩺 AI Teşhis Asistanı":
                 pot_i, sod_i, chlor_i, calc_i, phos_i, co2_i = 4.2, 145.0, 110.0, 10.0, 4.0, 20.0
 
         if st.sidebar.button("🧠 Kapsamlı AI Teşhis Analizi Başlat", type="primary", use_container_width=True):
-            # KREDİ KONTROL SİSTEMİ EKLENDİ
             islem_izni = True
             kullanici_adi = st.session_state.get("aktif_kullanici_adi")
             
+            # YENİ KREDİ KONTROL VE ONAY SİSTEMİ
             if kullanici_adi:
-                res = supabase.table("kullanicilar").select("ai_kredi").eq("kullanici_adi", kullanici_adi).execute()
-                mevcut_kredi = res.data[0].get("ai_kredi", 0)
-                if mevcut_kredi <= 0:
+                basarili_mi, kalan = kredi_dusur(kullanici_adi, "ai_kredi")
+                if not basarili_mi:
                     islem_izni = False
-                    st.sidebar.error("❌ AI Teşhis hakkınız (krediniz) bitmiştir! Lütfen yöneticiyle görüşün.")
+                    st.sidebar.error("❌ AI Teşhis hakkınız bitmiştir veya sistem işlemi onaylamadı!")
                 else:
-                    supabase.table("kullanicilar").update({"ai_kredi": mevcut_kredi - 1}).eq("kullanici_adi", kullanici_adi).execute()
-                    st.sidebar.success(f"✅ Kredi kullanıldı. Kalan AI Hakkınız: {mevcut_kredi - 1}")
+                    st.sidebar.success(f"✅ Kredi başarıyla kullanıldı. Kalan AI Hakkınız: {kalan}")
 
             if islem_izni:
                 st.subheader("🎯 Olası Tanı Sıralaması")
@@ -405,19 +433,17 @@ elif secilen_sayfa == "✂️ Pre-Op (Cerrahi Hazırlık)":
         kalp_pre = st.selectbox("Oskültasyon", ["Normal", "Üfürüm / Aritmi Tespit Edildi"])
 
     if st.button("✂️ Rapor Oluştur", type="primary", use_container_width=True):
-        # KREDİ KONTROL SİSTEMİ EKLENDİ
         islem_izni = True
         kullanici_adi = st.session_state.get("aktif_kullanici_adi")
         
+        # YENİ KREDİ KONTROL VE ONAY SİSTEMİ
         if kullanici_adi:
-            res = supabase.table("kullanicilar").select("preop_kredi").eq("kullanici_adi", kullanici_adi).execute()
-            mevcut_kredi = res.data[0].get("preop_kredi", 0)
-            if mevcut_kredi <= 0:
+            basarili_mi, kalan = kredi_dusur(kullanici_adi, "preop_kredi")
+            if not basarili_mi:
                 islem_izni = False
-                st.error("❌ Pre-Op Raporu için krediniz bitmiştir! Lütfen yöneticiyle görüşün.")
+                st.error("❌ Pre-Op Raporu için krediniz bitmiştir veya sistem işlemi onaylamadı!")
             else:
-                supabase.table("kullanicilar").update({"preop_kredi": mevcut_kredi - 1}).eq("kullanici_adi", kullanici_adi).execute()
-                st.success(f"✅ Kredi kullanıldı. Kalan Pre-Op Hakkınız: {mevcut_kredi - 1}")
+                st.success(f"✅ Kredi başarıyla kullanıldı. Kalan Pre-Op Hakkınız: {kalan}")
 
         if islem_izni:
             st.divider()
@@ -523,19 +549,17 @@ elif secilen_sayfa == "📸 Çoklu Röntgen & Hibrit Konsültasyon":
     analiz_baslat = st.button("🔍 Röntgen ve Lab Verilerini Eş Zamanlı Analiz Et", type="primary", use_container_width=True)
 
     if analiz_baslat:
-        # KREDİ KONTROL SİSTEMİ EKLENDİ
         islem_izni = True
         kullanici_adi = st.session_state.get("aktif_kullanici_adi")
         
+        # YENİ KREDİ KONTROL VE ONAY SİSTEMİ
         if kullanici_adi:
-            res = supabase.table("kullanicilar").select("rontgen_kredi").eq("kullanici_adi", kullanici_adi).execute()
-            mevcut_kredi = res.data[0].get("rontgen_kredi", 0)
-            if mevcut_kredi <= 0:
+            basarili_mi, kalan = kredi_dusur(kullanici_adi, "rontgen_kredi")
+            if not basarili_mi:
                 islem_izni = False
-                st.error("❌ Röntgen Analizi için krediniz bitmiştir! Lütfen yöneticiyle görüşün.")
+                st.error("❌ Röntgen Analizi için krediniz bitmiştir veya sistem işlemi onaylamadı!")
             else:
-                supabase.table("kullanicilar").update({"rontgen_kredi": mevcut_kredi - 1}).eq("kullanici_adi", kullanici_adi).execute()
-                st.success(f"✅ Kredi kullanıldı. Kalan Röntgen Hakkınız: {mevcut_kredi - 1}")
+                st.success(f"✅ Kredi başarıyla kullanıldı. Kalan Röntgen Hakkınız: {kalan}")
 
         if islem_izni:
             with st.spinner('Yapay zeka röntgen piksellerini ve laboratuvar verilerini sentezliyor...'):
