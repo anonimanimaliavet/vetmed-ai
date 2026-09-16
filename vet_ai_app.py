@@ -59,9 +59,8 @@ def veritabani_baglanti_ve_kontrol():
         return sayi
     except Exception:
         return 0
-    # Fonksiyonu çalıştırıp sonucu değişkene atayan eksik satır
-aktif_vaka_sayisi = veritabani_baglanti_ve_kontrol()
 
+aktif_vaka_sayisi = veritabani_baglanti_ve_kontrol()
 # --- SUPABASE VE GÜVENLİK ---
 SUPABASE_URL = "https://ukwskngnerynnuygrzrl.supabase.co"
 SUPABASE_KEY = "sb_publishable_lRMxOBQ5V-lG_OCMFThG_g_iqCgin_i"
@@ -75,17 +74,21 @@ controller = CookieController()
 SECURE_GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
 def kullanici_dogrula(girilen_kullanici, girilen_sifre):
-    """Kullanıcıyı SQLite veritabanından doğrular ve yetkilerini çeker."""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
+        # Kullanıcı adı ve şifresi doğru mu, ayrıca hesabı "Aktif" mi diye bakıyoruz
         c.execute("SELECT id, kullanici_adi, yetkili_moduller FROM kullanicilar WHERE kullanici_adi = ? AND sifre = ? AND aktif_mi = 1", (girilen_kullanici, girilen_sifre))
         kullanici = c.fetchone()
         conn.close()
+        
         if kullanici:
             return {"id": kullanici[0], "kullanici_adi": kullanici[1], "yetkiler": kullanici[2]}
-        return None
-    except sqlite3.OperationalError:
+        else:
+            return None
+    except sqlite3.OperationalError as e:
+        # Eğer tablo eskiyse ve sütunlar yoksa, sessizce çökmek yerine ekrana hatayı basar:
+        st.error(f"🚨 Veritabanı Tablo Hatası: {e} (Lütfen 'Bulut Veritabanını Onar' butonuna basın veya .db dosyasını silin)")
         return None
 
 def guvenlik_dogrula(k_adi, sifre):
