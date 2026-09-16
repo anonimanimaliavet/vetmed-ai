@@ -192,13 +192,18 @@ if not st.session_state.lisans_onaylandi:
                 
                 if st.button("Kullanıcı ile Giriş Yap", key="btn_kul_giris"):
                     user_data = kullanici_dogrula(k_adi, k_sifre)
+                    if st.button("Kullanıcı ile Giriş Yap", key="btn_kul_giris"):
+                    user_data = kullanici_dogrula(k_adi, k_sifre)
+                    
                     if user_data:
                         st.success(f"✅ Hoş geldin, {k_adi}!")
                         st.session_state.lisans_onaylandi = True
                         st.session_state.giris_turu = "kullanici"
                         st.session_state.yetkili_moduller = user_data["yetkiler"]
+                        st.session_state.aktif_kullanici_adi = k_adi # BU SATIRI EKLEYİN
                         time.sleep(0.5)
                         st.rerun()
+                        
                     else:
                         st.error("❌ Kullanıcı bulunamadı, şifre hatalı veya hesap pasif duruma getirilmiş!")
     except Exception as e:

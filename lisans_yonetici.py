@@ -122,17 +122,21 @@ with tab3:
     # 1. KULLANICI EKLEME
     modul_listesi = ["AI Teşhis Asistanı", "Pre-Op (Cerrahi Hazırlık)", "Çoklu Röntgen & Hibrit Konsültasyon", "Detaylı Vaka Girişi & Güvenlik"]
     
-    with st.expander("➕ Yeni Kullanıcı Ekle"):
+    with st.expander("➕ Yeni Kullanıcı Ekle (Kredili Sistem)"):
         with st.form("yeni_kullanici_formu", clear_on_submit=True):
             yeni_kullanici = st.text_input("Kullanıcı Adı")
             yeni_sifre = st.text_input("Şifre", type="password")
             secilen_moduller = st.multiselect("Erişilebilecek Modülleri Seçin", modul_listesi, default=modul_listesi)
             
+            # Kredi Belirleme Alanları
+            col_k1, col_k2 = st.columns(2)
+            kredi_ai = col_k1.number_input("AI Teşhis Kredisi (Hak)", min_value=0, value=2)
+            kredi_rontgen = col_k2.number_input("Röntgen Analiz Kredisi (Hak)", min_value=0, value=3)
+            
             if st.form_submit_button("Buluta Kaydet"):
                 if yeni_kullanici and yeni_sifre:
                     modul_metni = ", ".join(secilen_moduller)
                     try:
-                        # Kullanıcı var mı kontrolü
                         kontrol = supabase.table("kullanicilar").select("*").eq("kullanici_adi", yeni_kullanici).execute()
                         if len(kontrol.data) > 0:
                             st.error("❌ Bu kullanıcı adı zaten mevcut!")
@@ -141,9 +145,11 @@ with tab3:
                                 "kullanici_adi": yeni_kullanici,
                                 "sifre": yeni_sifre,
                                 "aktif_mi": True,
-                                "yetkili_moduller": modul_metni
+                                "yetkili_moduller": modul_metni,
+                                "ai_kredi": kredi_ai,
+                                "rontgen_kredi": kredi_rontgen
                             }).execute()
-                            st.success(f"'{yeni_kullanici}' başarıyla Supabase bulutuna kaydedildi!")
+                            st.success(f"'{yeni_kullanici}' başarıyla eklendi! AI Hakkı: {kredi_ai}, Röntgen Hakkı: {kredi_rontgen}")
                             st.rerun()
                     except Exception as e:
                         st.error(f"Kayıt Hatası: {e}")
