@@ -296,29 +296,34 @@ with st.expander("➕ Yeni Kullanıcı Ekle"):
 # --- 3. KULLANICILARI LİSTELEME VE YÖNETME BÖLÜMÜ ---
 st.subheader("Mevcut Kullanıcılar")
 
-# Veritabanından mevcut kullanıcıları çek
+# --- 3. KULLANICILARI LİSTELEME VE YÖNETME BÖLÜMÜ ---
+st.subheader("Mevcut Kullanıcılar")
+
+# Veritabanından mevcut kullanıcıları çek (Kendi Kendini Onaran Yapı)
 conn = sqlite3.connect(DB_PATH)
 c = conn.cursor()
-c.execute("SELECT id, kullanici_adi, aktif_mi FROM kullanicilar")
-kullanicilar = c.fetchall()
+
+try:
+    c.execute("SELECT id, kullanici_adi, aktif_mi FROM kullanicilar")
+    kullanicilar = c.fetchall()
+except sqlite3.OperationalError:
+    # Eğer GitHub'dan eski/bozuk tablo geldiyse, çökme! Tabloyu sil ve yenisini yap.
+    c.execute("DROP TABLE IF EXISTS kullanicilar")
+    c.execute('''CREATE TABLE kullanicilar
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  kullanici_adi TEXT UNIQUE,
+                  sifre TEXT,
+                  aktif_mi INTEGER DEFAULT 1,
+                  yetkili_moduller TEXT DEFAULT 'AI Teşhis Asistanı, Pre-Op (Cerrahi Hazırlık), Çoklu Röntgen & Hibrit Konsültasyon')''')
+    conn.commit()
+    kullanicilar = [] # Tablo yeni sıfırlandığı için liste boş
+    st.warning("⚠️ Buluttaki eski veritabanı tespit edildi ve otomatik olarak onarıldı. Lütfen kullanıcıları yeniden ekleyin.")
+
 conn.close()
 
+# Eğer kullanıcı varsa listele (Eski kodunuz buradan itibaren aynı kalabilir)
 if kullanicilar:
-    # Tablo başlıkları
-    col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
-    col1.markdown("**Kullanıcı Adı**")
-    col2.markdown("**Durum**")
-    col3.markdown("**İşlem**")
-    col4.markdown("**Sil**")
-    
-    # Kullanıcıları satır satır yazdır
-    for user in kullanicilar:
-        user_id, k_adi, aktif_mi = user
-        
-        c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
-        
-        c1.write(k_adi)
-        
+    # ...
         # Durum Göstergesi
         durum_metin = "🟢 Aktif" if aktif_mi == 1 else "🔴 Pasif"
         c2.write(durum_metin)
