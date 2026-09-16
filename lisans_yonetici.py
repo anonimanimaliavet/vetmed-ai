@@ -6,6 +6,31 @@ import streamlit as st
 import sqlite3  # BU SATIRI EKLEYİN
 import os
 
+import sqlite3
+import os
+import streamlit as st
+
+# Veritabanı Yolunu Sabitle
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "vetmed_klinik.db")
+
+# HER SAYFA YENİLENDİĞİNDE TABLOYU KONTROL ET VE YOKSA YARAT
+def tablolari_garantiye_al():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS kullanicilar
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  kullanici_adi TEXT UNIQUE,
+                  sifre TEXT,
+                  aktif_mi INTEGER DEFAULT 1,
+                  yetkili_moduller TEXT DEFAULT 'AI Teşhis Asistanı, Pre-Op (Cerrahi Hazırlık), Çoklu Röntgen & Hibrit Konsültasyon, Detaylı Vaka Girişi & Güvenlik')''')
+    conn.commit()
+    conn.close()
+
+tablolari_garantiye_al()
+
+# --- Geri kalan kodlarınız (Kullanıcı ekleme, listeleme vb.) buradan aşağıya devam etsin ---
+
 # --- AYARLAR ---
 SUPABASE_URL = "https://ukwskngnerynnuygrzrl.supabase.co"
 SUPABASE_KEY = "sb_publishable_lRMxOBQ5V-lG_OCMFThG_g_iqCgin_i"

@@ -192,7 +192,8 @@ import hashlib
 st.set_page_config(page_title="VetMed AI - Kurumsal Klinik Portal", layout="wide", page_icon="🏥")
 
 # --- KESİN VE DOĞRULANMIŞ SQLITE VERİTABANI YOLU ---
-DB_PATH = "vetmed_klinik.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "vetmed_klinik.db")
 def veritabani_baglanti_ve_kontrol():
     """Veritabanı dosyasını ve tablolarını garanti eder, kayıt sayısını döner."""
     try:
