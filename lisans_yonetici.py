@@ -166,27 +166,32 @@ with tab3:
         kullanicilar = []
 
     if kullanicilar:
-        col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+        col1, col2, col3, col4, col5 = st.columns([2, 1, 3, 2, 1])
         col1.markdown("**Kullanıcı Adı**")
         col2.markdown("**Durum**")
-        col3.markdown("**İşlem**")
-        col4.markdown("**Sil**")
+        col3.markdown("**Krediler (AI / Pre / Rönt)**")
+        col4.markdown("**İşlem**")
+        col5.markdown("**Sil**")
         
         for user in kullanicilar:
             user_id = user["id"]
             k_adi = user["kullanici_adi"]
             aktif_mi = user.get("aktif_mi", True)
+            c_ai = user.get("ai_kredi", 0)
+            c_pre = user.get("preop_kredi", 0)
+            c_ron = user.get("rontgen_kredi", 0)
             
-            c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
+            c1, c2, c3, c4, c5 = st.columns([2, 1, 3, 2, 1])
             c1.write(k_adi)
-            c2.write("🟢 Aktif" if aktif_mi else "🔴 Pasif")
+            c2.write("🟢" if aktif_mi else "🔴")
+            c3.write(f"{c_ai} / {c_pre} / {c_ron}")
             
-            if c3.button("Pasif Yap" if aktif_mi else "Aktif Yap", key=f"durum_{user_id}"):
+            if c4.button("Pasif Yap" if aktif_mi else "Aktif Yap", key=f"durum_{user_id}"):
                 yeni_durum = not aktif_mi
                 supabase.table("kullanicilar").update({"aktif_mi": yeni_durum}).eq("id", user_id).execute()
                 st.rerun()
                 
-            if c4.button("❌", key=f"sil_{user_id}"):
+            if c5.button("❌", key=f"sil_{user_id}"):
                 supabase.table("kullanicilar").delete().eq("id", user_id).execute()
                 st.rerun()
     else:

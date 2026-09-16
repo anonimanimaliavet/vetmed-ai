@@ -69,7 +69,6 @@ def kullanici_dogrula(girilen_kullanici, girilen_sifre):
         res = supabase.table("kullanicilar").select("*").eq("kullanici_adi", girilen_kullanici).execute()
         if len(res.data) > 0:
             user = res.data[0]
-            # Şifre doğru mu ve hesap aktif mi kontrolü
             if user["sifre"] == girilen_sifre and user.get("aktif_mi", True) == True:
                 return {"id": user["id"], "kullanici_adi": user["kullanici_adi"], "yetkiler": user.get("yetkili_moduller", "")}
             else:
@@ -103,6 +102,7 @@ if "lisans_onaylandi" not in st.session_state:
     st.session_state.lisans_onaylandi = False
     st.session_state.giris_turu = None
     st.session_state.yetkili_moduller = ""
+    st.session_state.aktif_kullanici_adi = None
 
 try:
     sistem_ayar = supabase.table("sistem_ayarlari").select("*").eq("id", 1).execute().data[0]
@@ -192,20 +192,17 @@ if not st.session_state.lisans_onaylandi:
                 
                 if st.button("Kullanıcı ile Giriş Yap", key="btn_kul_giris"):
                     user_data = kullanici_dogrula(k_adi, k_sifre)
-                    if st.button("Kullanıcı ile Giriş Yap", key="btn_kul_giris"):
-                    user_data = kullanici_dogrula(k_adi, k_sifre)
-                    
                     if user_data:
                         st.success(f"✅ Hoş geldin, {k_adi}!")
                         st.session_state.lisans_onaylandi = True
                         st.session_state.giris_turu = "kullanici"
                         st.session_state.yetkili_moduller = user_data["yetkiler"]
-                        st.session_state.aktif_kullanici_adi = k_adi # BU SATIRI EKLEYİN
+                        st.session_state.aktif_kullanici_adi = k_adi # Kredi sistemi için oturumu kaydettik
                         time.sleep(0.5)
                         st.rerun()
-                        
                     else:
-                        st.error("❌ Kullanıcı bulunamadı, şifre hatalı veya hesap pasif duruma getirilmiş!")
+                        # Hata mesajları yukarıdaki kullanici_dogrula içerisinde zaten veriliyor
+                        pass
     except Exception as e:
         st.error(f"Bağlantı Hatası: {e}")
     st.stop()
@@ -352,15 +349,30 @@ if secilen_sayfa == "🩺 AI Teşhis Asistanı":
                 pot_i, sod_i, chlor_i, calc_i, phos_i, co2_i = 4.2, 145.0, 110.0, 10.0, 4.0, 20.0
 
         if st.sidebar.button("🧠 Kapsamlı AI Teşhis Analizi Başlat", type="primary", use_container_width=True):
-            st.subheader("🎯 Olası Tanı Sıralaması")
-            input_array = [le_species.transform([tur_input])[0], le_sex.transform([cinsiyet_input])[0], yas_input, agirlik_input, 1 if kisir_input else 0, ates_input, nabiz_input, solunum_input, crt_input, le_mucosa.transform([mukosa_input])[0], le_hydration.transform([hidrasyon_input])[0], int(istah), int(kusma), int(ishal), int(halsizlik), int(oksuruk), int(nefes_darligi), int(kilo_kaybi), int(pd_inp), int(pu_inp), int(seizure_inp), int(bleeding_inp), wbc_i, rbc_i, hgb_i, hct_i, plt_i, lym_i, mon_i, eos_i, mcv_i, mchc_i, ret_i, glu_i, urea_i, crea_i, alt_i, ast_i, alp_i, gha_i, tbili_i, tp_i, alb_i, glob_i, amyl_i, lip_i, pot_i, sod_i, chlor_i, calc_i, phos_i, co2_i]
-            input_data = pd.DataFrame([input_array], columns=features_list)
-            probs = model.predict_proba(input_data)[0]
-            prob_df = pd.DataFrame({'Tanı': le_tani.classes_, 'Olasılık': probs}).sort_values(by='Olasılık', ascending=False)
+            # KREDİ KONTROL SİSTEMİ EKLENDİ
+            islem_izni = True
+            kullanici_adi = st.session_state.get("aktif_kullanici_adi")
             
-            for i, row in prob_df.head(4).iterrows():
-                st.write(f"**{row['Tanı']}**: %{row['Olasılık']*100:.1f}")
-                st.progress(float(row['Olasılık']))
+            if kullanici_adi:
+                res = supabase.table("kullanicilar").select("ai_kredi").eq("kullanici_adi", kullanici_adi).execute()
+                mevcut_kredi = res.data[0].get("ai_kredi", 0)
+                if mevcut_kredi <= 0:
+                    islem_izni = False
+                    st.sidebar.error("❌ AI Teşhis hakkınız (krediniz) bitmiştir! Lütfen yöneticiyle görüşün.")
+                else:
+                    supabase.table("kullanicilar").update({"ai_kredi": mevcut_kredi - 1}).eq("kullanici_adi", kullanici_adi).execute()
+                    st.sidebar.success(f"✅ Kredi kullanıldı. Kalan AI Hakkınız: {mevcut_kredi - 1}")
+
+            if islem_izni:
+                st.subheader("🎯 Olası Tanı Sıralaması")
+                input_array = [le_species.transform([tur_input])[0], le_sex.transform([cinsiyet_input])[0], yas_input, agirlik_input, 1 if kisir_input else 0, ates_input, nabiz_input, solunum_input, crt_input, le_mucosa.transform([mukosa_input])[0], le_hydration.transform([hidrasyon_input])[0], int(istah), int(kusma), int(ishal), int(halsizlik), int(oksuruk), int(nefes_darligi), int(kilo_kaybi), int(pd_inp), int(pu_inp), int(seizure_inp), int(bleeding_inp), wbc_i, rbc_i, hgb_i, hct_i, plt_i, lym_i, mon_i, eos_i, mcv_i, mchc_i, ret_i, glu_i, urea_i, crea_i, alt_i, ast_i, alp_i, gha_i, tbili_i, tp_i, alb_i, glob_i, amyl_i, lip_i, pot_i, sod_i, chlor_i, calc_i, phos_i, co2_i]
+                input_data = pd.DataFrame([input_array], columns=features_list)
+                probs = model.predict_proba(input_data)[0]
+                prob_df = pd.DataFrame({'Tanı': le_tani.classes_, 'Olasılık': probs}).sort_values(by='Olasılık', ascending=False)
+                
+                for i, row in prob_df.head(4).iterrows():
+                    st.write(f"**{row['Tanı']}**: %{row['Olasılık']*100:.1f}")
+                    st.progress(float(row['Olasılık']))
     else:
         st.warning(f"⚠️ Veritabanında yeterli vaka kaydı bulunamadı. Lütfen veri üretin.")
 
@@ -393,20 +405,35 @@ elif secilen_sayfa == "✂️ Pre-Op (Cerrahi Hazırlık)":
         kalp_pre = st.selectbox("Oskültasyon", ["Normal", "Üfürüm / Aritmi Tespit Edildi"])
 
     if st.button("✂️ Rapor Oluştur", type="primary", use_container_width=True):
-        st.divider()
-        st.subheader("📊 Anestezi Protokolü ve Risk Matrisi")
-        risk, protokoller = 0, []
-        if irk_tipi: risk += 2; protokoller.append("**Havayolu Yönetimi:** Brakisefalik sendrom riski. Oksijen desteği kesilmemelidir.")
-        if kalp_pre == "Üfürüm / Aritmi Tespit Edildi": risk += 3; protokoller.append("**Kardiyak Güvence:** EKO önerilir.")
-        if alb_pre < 2.5: risk += 2; protokoller.append("**Doz Ayarlaması:** Hipoalbuminemi. Doz azaltılmalıdır.")
+        # KREDİ KONTROL SİSTEMİ EKLENDİ
+        islem_izni = True
+        kullanici_adi = st.session_state.get("aktif_kullanici_adi")
         
-        if risk <= 1: st.success("✅ **ASA I / II:** Standart protokol uygulanabilir.")
-        elif 2 <= risk <= 4: st.warning("⚠️ **ASA III:** Hasta yakından izlenmeli.")
-        else: st.error("🛑 **ASA IV / V:** Operasyon acil değilse ertelenmeli.")
-        
-        for p in protokoller: st.markdown(f"- {p}")
+        if kullanici_adi:
+            res = supabase.table("kullanicilar").select("preop_kredi").eq("kullanici_adi", kullanici_adi).execute()
+            mevcut_kredi = res.data[0].get("preop_kredi", 0)
+            if mevcut_kredi <= 0:
+                islem_izni = False
+                st.error("❌ Pre-Op Raporu için krediniz bitmiştir! Lütfen yöneticiyle görüşün.")
+            else:
+                supabase.table("kullanicilar").update({"preop_kredi": mevcut_kredi - 1}).eq("kullanici_adi", kullanici_adi).execute()
+                st.success(f"✅ Kredi kullanıldı. Kalan Pre-Op Hakkınız: {mevcut_kredi - 1}")
 
-# ================= SAYFA 3: RÖNTGEN VE HİBRİT KONSÜLTASYON (ORİJİNAL DETAYLI HALİ) =================
+        if islem_izni:
+            st.divider()
+            st.subheader("📊 Anestezi Protokolü ve Risk Matrisi")
+            risk, protokoller = 0, []
+            if irk_tipi: risk += 2; protokoller.append("**Havayolu Yönetimi:** Brakisefalik sendrom riski. Oksijen desteği kesilmemelidir.")
+            if kalp_pre == "Üfürüm / Aritmi Tespit Edildi": risk += 3; protokoller.append("**Kardiyak Güvence:** EKO önerilir.")
+            if alb_pre < 2.5: risk += 2; protokoller.append("**Doz Ayarlaması:** Hipoalbuminemi. Doz azaltılmalıdır.")
+            
+            if risk <= 1: st.success("✅ **ASA I / II:** Standart protokol uygulanabilir.")
+            elif 2 <= risk <= 4: st.warning("⚠️ **ASA III:** Hasta yakından izlenmeli.")
+            else: st.error("🛑 **ASA IV / V:** Operasyon acil değilse ertelenmeli.")
+            
+            for p in protokoller: st.markdown(f"- {p}")
+
+# ================= SAYFA 3: RÖNTGEN VE HİBRİT KONSÜLTASYON =================
 elif secilen_sayfa == "📸 Çoklu Röntgen & Hibrit Konsültasyon":
     st.title("📸 Çoklu Radyografi ve Hibrit Klinik Konsültasyon")
     st.markdown("Yüklenen röntgen görsellerini hastanın eksiksiz hemogram, biyokimya ve elektrolit parametreleriyle birlikte 'Veri Yok' esnekliğiyle analiz eder.")
@@ -496,49 +523,64 @@ elif secilen_sayfa == "📸 Çoklu Röntgen & Hibrit Konsültasyon":
     analiz_baslat = st.button("🔍 Röntgen ve Lab Verilerini Eş Zamanlı Analiz Et", type="primary", use_container_width=True)
 
     if analiz_baslat:
-        with st.spinner('Yapay zeka röntgen piksellerini ve laboratuvar verilerini sentezliyor...'):
-            try:
-                parts_list = []
-                foto_bilgi = f"{len(yuklenen_fotolar)} adet röntgen görseli yüklenmiştir." if yuklenen_fotolar else "Röntgen görseli yüklenmemiştir."
-                
-                prompt = f"""
-                Sen kıdemli bir veteriner dahiliye uzmanı, cerrah ve radyologsun. Sana bu hasta için {foto_bilgi} ve şu klinik/laboratuvar parametreler sunulmuştur:
-                - Tür: {r_tur} | Yaş: {r_yas} | Ateş: {r_ates}°C | Solunum: {r_solunum}/dk
-                - Hemogram: WBC={r_wbc}, RBC={r_rbc}, HGB={r_hgb}, HCT={r_hct}%, PLT={r_plt}, LYM={r_lym}%, MON={r_mon}%, EOS={r_eos}%, MCV={r_mcv}, MCHC={r_mchc}, Retikülosit={r_ret}%
-                - Biyokimya: Glukoz={r_glu}, Üre={r_urea}, Kreatinin={r_crea}, ALT={r_alt}, AST={r_ast}, ALP={r_alp}, GGT={r_gha}, Total Bilirubin={r_tbili}, Total Protein={r_tp}, Albumin={r_alb}, Globulin={r_glob}, Amilaz={r_amyl}, Lipaz={r_lip}
-                - Elektrolitler: Potasyum={r_pot}, Sodyum={r_sod}, Klor={r_chlor}, Kalsiyum={r_calc}, Fosfor={r_phos}, Total CO2={r_co2}
-                - Ek Notlar: {r_notlar}
+        # KREDİ KONTROL SİSTEMİ EKLENDİ
+        islem_izni = True
+        kullanici_adi = st.session_state.get("aktif_kullanici_adi")
+        
+        if kullanici_adi:
+            res = supabase.table("kullanicilar").select("rontgen_kredi").eq("kullanici_adi", kullanici_adi).execute()
+            mevcut_kredi = res.data[0].get("rontgen_kredi", 0)
+            if mevcut_kredi <= 0:
+                islem_izni = False
+                st.error("❌ Röntgen Analizi için krediniz bitmiştir! Lütfen yöneticiyle görüşün.")
+            else:
+                supabase.table("kullanicilar").update({"rontgen_kredi": mevcut_kredi - 1}).eq("kullanici_adi", kullanici_adi).execute()
+                st.success(f"✅ Kredi kullanıldı. Kalan Röntgen Hakkınız: {mevcut_kredi - 1}")
 
-                Lütfen yüklenen görseller ile bu laboratuvar ve klinik bulgularını çapraz bağlayarak kapsamlı bir rapor sun. Şu formatı kullan:
-                1. **Radyolojik ve Klinik Bulguların Sentezi**
-                2. **Kesin Vaka Teşhisi**
-                3. **Medikal / Cerrahi Tedavi ve Reçete Protokolü**
-                """
-                parts_list.append({"text": prompt})
-                
-                if yuklenen_fotolar:
-                    for foto in yuklenen_fotolar:
-                        encoded_img = base64.b64encode(foto.getvalue()).decode("utf-8")
-                        parts_list.append({"inline_data": {"mime_type": foto.type, "data": encoded_img}})
-                
-                api_key_temiz = SECURE_GEMINI_API_KEY.strip()
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key_temiz}"
-                
-                payload = {"contents": [{"parts": parts_list}]}
-                response = requests.post(url, json=payload)
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    ai_metin = result['candidates'][0]['content']['parts'][0]['text']
-                    st.divider()
-                    st.subheader("📑 Konsültasyon Raporu")
-                    st.write(ai_metin)
-                else:
-                    st.divider()
-                    st.error(f"❌ API Bağlantı Hatası (Kod: {response.status_code})")
-                    st.write("API Yanıtı:", response.text)
-            except Exception as e:
-                st.error(f"Bağlantı hatası: {e}")
+        if islem_izni:
+            with st.spinner('Yapay zeka röntgen piksellerini ve laboratuvar verilerini sentezliyor...'):
+                try:
+                    parts_list = []
+                    foto_bilgi = f"{len(yuklenen_fotolar)} adet röntgen görseli yüklenmiştir." if yuklenen_fotolar else "Röntgen görseli yüklenmemiştir."
+                    
+                    prompt = f"""
+                    Sen kıdemli bir veteriner dahiliye uzmanı, cerrah ve radyologsun. Sana bu hasta için {foto_bilgi} ve şu klinik/laboratuvar parametreler sunulmuştur:
+                    - Tür: {r_tur} | Yaş: {r_yas} | Ateş: {r_ates}°C | Solunum: {r_solunum}/dk
+                    - Hemogram: WBC={r_wbc}, RBC={r_rbc}, HGB={r_hgb}, HCT={r_hct}%, PLT={r_plt}, LYM={r_lym}%, MON={r_mon}%, EOS={r_eos}%, MCV={r_mcv}, MCHC={r_mchc}, Retikülosit={r_ret}%
+                    - Biyokimya: Glukoz={r_glu}, Üre={r_urea}, Kreatinin={r_crea}, ALT={r_alt}, AST={r_ast}, ALP={r_alp}, GGT={r_gha}, Total Bilirubin={r_tbili}, Total Protein={r_tp}, Albumin={r_alb}, Globulin={r_glob}, Amilaz={r_amyl}, Lipaz={r_lip}
+                    - Elektrolitler: Potasyum={r_pot}, Sodyum={r_sod}, Klor={r_chlor}, Kalsiyum={r_calc}, Fosfor={r_phos}, Total CO2={r_co2}
+                    - Ek Notlar: {r_notlar}
+    
+                    Lütfen yüklenen görseller ile bu laboratuvar ve klinik bulgularını çapraz bağlayarak kapsamlı bir rapor sun. Şu formatı kullan:
+                    1. **Radyolojik ve Klinik Bulguların Sentezi**
+                    2. **Kesin Vaka Teşhisi**
+                    3. **Medikal / Cerrahi Tedavi ve Reçete Protokolü**
+                    """
+                    parts_list.append({"text": prompt})
+                    
+                    if yuklenen_fotolar:
+                        for foto in yuklenen_fotolar:
+                            encoded_img = base64.b64encode(foto.getvalue()).decode("utf-8")
+                            parts_list.append({"inline_data": {"mime_type": foto.type, "data": encoded_img}})
+                    
+                    api_key_temiz = SECURE_GEMINI_API_KEY.strip()
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key_temiz}"
+                    
+                    payload = {"contents": [{"parts": parts_list}]}
+                    response = requests.post(url, json=payload)
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        ai_metin = result['candidates'][0]['content']['parts'][0]['text']
+                        st.divider()
+                        st.subheader("📑 Konsültasyon Raporu")
+                        st.write(ai_metin)
+                    else:
+                        st.divider()
+                        st.error(f"❌ API Bağlantı Hatası (Kod: {response.status_code})")
+                        st.write("API Yanıtı:", response.text)
+                except Exception as e:
+                    st.error(f"Bağlantı hatası: {e}")
 
 # ================= SAYFA 4: GÜVENLİK VE VERİ GİRİŞİ =================
 elif secilen_sayfa == "📂 Detaylı Vaka Girişi & Güvenlik":
