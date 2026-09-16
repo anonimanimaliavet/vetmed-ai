@@ -129,9 +129,10 @@ with tab3:
             secilen_moduller = st.multiselect("Erişilebilecek Modülleri Seçin", modul_listesi, default=modul_listesi)
             
             # Kredi Belirleme Alanları
-            col_k1, col_k2 = st.columns(2)
-            kredi_ai = col_k1.number_input("AI Teşhis Kredisi (Hak)", min_value=0, value=2)
-            kredi_rontgen = col_k2.number_input("Röntgen Analiz Kredisi (Hak)", min_value=0, value=3)
+            col_k1, col_k2, col_k3 = st.columns(3)
+            kredi_ai = col_k1.number_input("AI Teşhis Kredisi", min_value=0, value=2)
+            kredi_preop = col_k2.number_input("Pre-Op Kredisi", min_value=0, value=5)
+            kredi_rontgen = col_k3.number_input("Röntgen Kredisi", min_value=0, value=3)
             
             if st.form_submit_button("Buluta Kaydet"):
                 if yeni_kullanici and yeni_sifre:
@@ -147,9 +148,10 @@ with tab3:
                                 "aktif_mi": True,
                                 "yetkili_moduller": modul_metni,
                                 "ai_kredi": kredi_ai,
+                                "preop_kredi": kredi_preop,
                                 "rontgen_kredi": kredi_rontgen
                             }).execute()
-                            st.success(f"'{yeni_kullanici}' başarıyla eklendi! AI Hakkı: {kredi_ai}, Röntgen Hakkı: {kredi_rontgen}")
+                            st.success(f"'{yeni_kullanici}' başarıyla eklendi! AI: {kredi_ai}, Pre-Op: {kredi_preop}, Röntgen: {kredi_rontgen}")
                             st.rerun()
                     except Exception as e:
                         st.error(f"Kayıt Hatası: {e}")
