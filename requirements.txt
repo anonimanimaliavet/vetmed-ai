@@ -1,4 +1,6 @@
 streamlit
+supabase
+streamlit-cookies-controller
 pandas
 xgboost
 scikit-learn
