@@ -199,6 +199,25 @@ kullanici_tablosu_olustur()
 st.divider()
 st.header("👥 Kullanıcı Yönetimi")
 
+# --- HATA ÇÖZÜMÜ İÇİN GEÇİCİ BUTON ---
+if st.button("🚨 Bulut Veritabanını Onar / Sıfırla"):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("DROP TABLE IF EXISTS kullanicilar")
+        conn.commit()
+        conn.close()
+        
+        # Tabloyu baştan, eksiksiz oluştur
+        kullanici_tablosu_olustur()
+        tabloya_modul_yetkisi_ekle()
+        
+        st.success("✅ Veritabanı başarıyla onarıldı! Lütfen sayfayı yenileyin.")
+        st.rerun()
+    except Exception as e:
+        st.error(f"Onarım sırasında hata: {e}")
+# ------------------------------------
+
 def tabloya_modul_yetkisi_ekle():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
