@@ -2,6 +2,9 @@ import datetime
 import streamlit as st
 from supabase import create_client, Client
 import uuid
+import streamlit as st
+import sqlite3  # BU SATIRI EKLEYİN
+import os
 
 # --- AYARLAR ---
 SUPABASE_URL = "https://ukwskngnerynnuygrzrl.supabase.co"
@@ -165,3 +168,128 @@ with tab3:
                 st.error("Bu kullanıcı adı zaten mevcut olabilir veya bağlantı hatası oluştu.")
         else:
             st.warning("Lütfen kullanıcı adı ve şifre girin.")
+
+            import sqlite3
+import os
+import streamlit as st
+
+# Veritabanı yolunu ayarla (pages klasöründe olduğumuz için bir üst klasöre bakıyoruz)
+import sqlite3
+import os
+import streamlit as st
+
+# Veritabanı yolunu ayarla (Artık ana dizinde olduğumuz için doğrudan BASE_DIR kullanıyoruz)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "vetmed_klinik.db")
+
+# 1. TABLO OLUŞTURMA (Eğer yoksa otomatik oluşturur)
+def kullanici_tablosu_olustur():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS kullanicilar
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  kullanici_adi TEXT UNIQUE,
+                  sifre TEXT,
+                  aktif_mi INTEGER DEFAULT 1)''')
+    conn.commit()
+    conn.close()
+
+kullanici_tablosu_olustur()
+
+st.divider()
+st.header("👥 Kullanıcı Yönetimi")
+
+def tabloya_modul_yetkisi_ekle():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    try:
+        # Kullanıcılar tablosuna yetki sütunu ekliyoruz (Varsayılan olarak hepsine açık)
+        c.execute("ALTER TABLE kullanicilar ADD COLUMN yetkili_moduller TEXT DEFAULT 'AI Teşhis Asistanı, Pre-Op (Cerrahi Hazırlık), Çoklu Röntgen & Hibrit Konsültasyon'")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass # Sütun zaten daha önce eklendiyse hata vermeden devam et
+    conn.close()
+
+tabloya_modul_yetkisi_ekle()
+
+# --- 2. KULLANICI EKLEME BÖLÜMÜ ---
+modul_listesi = [
+    "AI Teşhis Asistanı", 
+    "Pre-Op (Cerrahi Hazırlık)", 
+    "Çoklu Röntgen & Hibrit Konsültasyon", 
+    "Detaylı Vaka Girişi & Güvenlik"
+]
+
+with st.expander("➕ Yeni Kullanıcı Ekle"):
+    with st.form("yeni_kullanici_formu", clear_on_submit=True):
+        yeni_kullanici = st.text_input("Kullanıcı Adı")
+        yeni_sifre = st.text_input("Şifre", type="password")
+        
+        # Yeni çoklu seçim alanı
+        secilen_moduller = st.multiselect("Erişilebilecek Modülleri Seçin", modul_listesi, default=modul_listesi)
+        
+        ekle_buton = st.form_submit_button("Kullanıcıyı Kaydet")
+        
+        if ekle_buton and yeni_kullanici and yeni_sifre:
+            # Seçimleri veritabanına yazabilmek için virgüllü metne çeviriyoruz
+            modul_metni = ", ".join(secilen_moduller) 
+            
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute("INSERT INTO kullanicilar (kullanici_adi, sifre, aktif_mi, yetkili_moduller) VALUES (?, ?, ?, ?)", 
+                      (yeni_kullanici, yeni_sifre, 1, modul_metni))
+            conn.commit()
+            conn.close()
+            st.success("Kullanıcı ve modül yetkileri başarıyla kaydedildi!")
+            st.rerun()
+# --- 3. KULLANICILARI LİSTELEME VE YÖNETME BÖLÜMÜ ---
+st.subheader("Mevcut Kullanıcılar")
+
+# Veritabanından mevcut kullanıcıları çek
+conn = sqlite3.connect(DB_PATH)
+c = conn.cursor()
+c.execute("SELECT id, kullanici_adi, aktif_mi FROM kullanicilar")
+kullanicilar = c.fetchall()
+conn.close()
+
+if kullanicilar:
+    # Tablo başlıkları
+    col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+    col1.markdown("**Kullanıcı Adı**")
+    col2.markdown("**Durum**")
+    col3.markdown("**İşlem**")
+    col4.markdown("**Sil**")
+    
+    # Kullanıcıları satır satır yazdır
+    for user in kullanicilar:
+        user_id, k_adi, aktif_mi = user
+        
+        c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
+        
+        c1.write(k_adi)
+        
+        # Durum Göstergesi
+        durum_metin = "🟢 Aktif" if aktif_mi == 1 else "🔴 Pasif"
+        c2.write(durum_metin)
+        
+        # Durum Değiştirme Butonu (Aktif <-> Pasif)
+        buton_metni = "Pasif Yap" if aktif_mi == 1 else "Aktif Yap"
+        if c3.button(buton_metni, key=f"durum_{user_id}"):
+            yeni_durum = 0 if aktif_mi == 1 else 1
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute("UPDATE kullanicilar SET aktif_mi = ? WHERE id = ?", (yeni_durum, user_id))
+            conn.commit()
+            conn.close()
+            st.rerun()
+            
+        # Silme Butonu
+        if c4.button("❌", key=f"sil_{user_id}"):
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute("DELETE FROM kullanicilar WHERE id = ?", (user_id,))
+            conn.commit()
+            conn.close()
+            st.rerun()
+else:
+    st.info("Sistemde henüz kayıtlı kullanıcı bulunmuyor.")
