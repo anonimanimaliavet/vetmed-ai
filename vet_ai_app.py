@@ -15,7 +15,7 @@ import hashlib
 
 st.set_page_config(page_title="VetMed AI - Kurumsal Klinik Portal", layout="wide", page_icon="🏥")
 
-# --- KESİN VE DOĞRULANMIŞ SQLITE VERİTABANI YOLU ---
+# --- SQLITE BAĞLANTISI (SADECE TIBBİ VAKALAR İÇİN) ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "vetmed_klinik.db")
 
@@ -24,7 +24,6 @@ def veritabani_baglanti_ve_kontrol():
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
-        # 1. Vakalar Tablosu
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='vakalar';")
         if not cursor.fetchone():
             cursor.execute('''CREATE TABLE IF NOT EXISTS vakalar (
@@ -36,16 +35,6 @@ def veritabani_baglanti_ve_kontrol():
                     alt_u_l REAL, ast_u_l REAL, alp_u_l REAL, gha_u_l REAL, total_bilirubin_mg_dl REAL, total_protein_g_dl REAL, albumin_g_dl REAL, globulin_g_dl REAL, amylase_u_l REAL, 
                     lipase_u_l REAL, potassium_mmol_l REAL, sodium_mmol_l REAL, chloride_mmol_l REAL, calcium_mg_dl REAL, phosphorus_mg_dl REAL, total_co2_mmol_l REAL, final_diagnosis TEXT
                 )''')
-                
-        # 2. Kullanıcılar Tablosu (ESKİ YAPI SİLİNDİ, YENİ YAPI EKLENDİ)
-        cursor.execute('''CREATE TABLE IF NOT EXISTS kullanicilar
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  kullanici_adi TEXT UNIQUE,
-                  sifre TEXT,
-                  aktif_mi INTEGER DEFAULT 1,
-                  yetkili_moduller TEXT DEFAULT 'AI Teşhis Asistanı, Pre-Op (Cerrahi Hazırlık), Çoklu Röntgen & Hibrit Konsültasyon, Detaylı Vaka Girişi & Güvenlik')''')
-        
-        # 3. Hastalıklar Tablosu
         cursor.execute("CREATE TABLE IF NOT EXISTS hastaliklar (hastalik_adi TEXT PRIMARY KEY)")
         
         varsayilan_tanilar = ['Sağlıklı/klinik olarak anlamlı patoloji yok', 'Böbrek hastalığı', 'Hepatobiliyer hastalık', 'Gastrointestinal hastalık', 'Solunum sistemi hastalığı', 'Endokrin/metabolik hastalık', 'Enfeksiyöz hastalık', 'Ortopedik Hastalık']
@@ -61,6 +50,7 @@ def veritabani_baglanti_ve_kontrol():
         return 0
 
 aktif_vaka_sayisi = veritabani_baglanti_ve_kontrol()
+
 # --- SUPABASE VE GÜVENLİK ---
 SUPABASE_URL = "https://ukwskngnerynnuygrzrl.supabase.co"
 SUPABASE_KEY = "sb_publishable_lRMxOBQ5V-lG_OCMFThG_g_iqCgin_i"
@@ -74,21 +64,22 @@ controller = CookieController()
 SECURE_GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
 def kullanici_dogrula(girilen_kullanici, girilen_sifre):
+    """Kullanıcıyı SUPABASE bulut veritabanından doğrular."""
     try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        # Kullanıcı adı ve şifresi doğru mu, ayrıca hesabı "Aktif" mi diye bakıyoruz
-        c.execute("SELECT id, kullanici_adi, yetkili_moduller FROM kullanicilar WHERE kullanici_adi = ? AND sifre = ? AND aktif_mi = 1", (girilen_kullanici, girilen_sifre))
-        kullanici = c.fetchone()
-        conn.close()
-        
-        if kullanici:
-            return {"id": kullanici[0], "kullanici_adi": kullanici[1], "yetkiler": kullanici[2]}
+        res = supabase.table("kullanicilar").select("*").eq("kullanici_adi", girilen_kullanici).execute()
+        if len(res.data) > 0:
+            user = res.data[0]
+            # Şifre doğru mu ve hesap aktif mi kontrolü
+            if user["sifre"] == girilen_sifre and user.get("aktif_mi", True) == True:
+                return {"id": user["id"], "kullanici_adi": user["kullanici_adi"], "yetkiler": user.get("yetkili_moduller", "")}
+            else:
+                st.error("🚨 HATA: Şifre yanlış veya kullanıcının 'aktif_mi' durumu kapalı.")
+                return None
         else:
+            st.error(f"🚨 HATA: '{girilen_kullanici}' adında bir kullanıcı Supabase tablosunda hiç yok!")
             return None
-    except sqlite3.OperationalError as e:
-        # Eğer tablo eskiyse ve sütunlar yoksa, sessizce çökmek yerine ekrana hatayı basar:
-        st.error(f"🚨 Veritabanı Tablo Hatası: {e} (Lütfen 'Bulut Veritabanını Onar' butonuna basın veya .db dosyasını silin)")
+    except Exception as e:
+        st.error(f"🚨 SUPABASE BAĞLANTI HATASI: {e}")
         return None
 
 def guvenlik_dogrula(k_adi, sifre):
@@ -104,8 +95,7 @@ def otomatik_hasta_id_uret():
         if row and row[0]:
             sayi_id = int(''.join(filter(str.isdigit, str(row[0]))))
             return f"P{sayi_id + 1}"
-    except:
-        pass
+    except: pass
     return f"P{np.random.randint(5001, 9999)}"
 
 # --- OTURUM DURUMU YÖNETİMİ ---
@@ -126,9 +116,8 @@ try:
         except: pass
     elif acik_erisim:
         st.session_state.lisans_onaylandi = True
-        st.session_state.giris_turu = "lisans" # Açık erişimde tüm yetkiler var
-except:
-    pass
+        st.session_state.giris_turu = "lisans" 
+except: pass
 
 kayitli_sureli_lisans = controller.get('sureli_lisans')
 if kayitli_sureli_lisans and not st.session_state.lisans_onaylandi:
