@@ -262,7 +262,8 @@ def veritabani_baglanti_ve_kontrol():
 
 aktif_vaka_sayisi = veritabani_baglanti_ve_kontrol()
 
-SECURE_GEMINI_API_KEY = "AQ.Ab8RN6JG6SMUc1HDjYfkMDZOVP3qhB80U35FTphFCaqBkA8s5g" 
+# API anahtarını Streamlit Secrets üzerinden güvenle çekiyoruz
+SECURE_GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
 def guvenlik_dogrula(kullanici_input, sifre_input):
     if not kullanici_input or not sifre_input:
